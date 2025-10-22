@@ -1,34 +1,40 @@
+import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 from docx import Document
+from io import BytesIO
 
-# --- CONFIGURATION ---
-notion_url = "TON_URL_NOTION_ICI"  # Remplace par l'URL publique de ta page Notion
-output_file = "notion_page.docx"
+st.title("Notion Page → Word")
 
-# --- RÉCUPÉRATION DE LA PAGE ---
-response = requests.get(notion_url)
-if response.status_code != 200:
-    raise Exception(f"Impossible de récupérer la page, statut {response.status_code}")
+notion_url = st.text_input("URL de la page Notion publique:")
 
-html_content = response.text
-
-# --- EXTRACTION DU TEXTE ---
-soup = BeautifulSoup(html_content, "html.parser")
-# Récupère tout le texte visible
-for script_or_style in soup(["script", "style"]):
-    script_or_style.decompose()
-
-text = soup.get_text(separator="\n")  # sépare par lignes
-
-# Nettoyage simple : supprime les lignes vides
-lines = [line.strip() for line in text.splitlines() if line.strip()]
-clean_text = "\n".join(lines)
-
-# --- ÉCRITURE DANS LE DOCX ---
-doc = Document()
-for line in lines:
-    doc.add_paragraph(line)
-
-doc.save(output_file)
-print(f"Le contenu a été enregistré dans {output_file}")
+if st.button("Générer DOCX") and notion_url:
+    try:
+        response = requests.get(notion_url)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        for script_or_style in soup(["script", "style"]):
+            script_or_style.decompose()
+        
+        text = soup.get_text(separator="\n")
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        
+        doc = Document()
+        for line in lines:
+            doc.add_paragraph(line)
+        
+        # Préparer le DOCX en mémoire
+        doc_io = BytesIO()
+        doc.save(doc_io)
+        doc_io.seek(0)
+        
+        st.download_button(
+            label="Télécharger le fichier Word",
+            data=doc_io,
+            file_name="notion_page.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        st.success("DOCX généré avec succès !")
+    except Exception as e:
+        st.error(f"Erreur : {e}")
